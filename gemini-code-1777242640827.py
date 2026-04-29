@@ -4,21 +4,22 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # 1. Configurações da Página
-st.set_page_config(page_title="Dashboard ETFs Internacionais", layout="wide")
+st.set_page_config(page_title="Dashboard ETFs Internacionais & DIVO11", layout="wide")
 
 # Estilos Visuais
 st.markdown("""
     <style>
     .main { background-color: #f0f2f6; }
-    .card { padding: 15px; border-radius: 10px; background-color: white; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 150px; }
+    .card { padding: 15px; border-radius: 10px; background-color: white; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 160px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Definição dos ETFs
+# 2. Definição dos ETFs (Incluso DIVO11)
 etfs_config = {
     'IVV': {'nome': 'S&P 500 ETF', 'cor': '#27ae60'},
     'VEA': {'nome': 'Developed Markets', 'cor': '#2980b9'},
     'SOXX': {'nome': 'Semiconductors', 'cor': '#8e44ad'},
+    'DIVO11.SA': {'nome': 'Dividendos Brasil', 'cor': '#e67e22'}, # Novo
     'IAU': {'nome': 'Gold Trust', 'cor': '#f1c40f'},
     'SIVR': {'nome': 'Silver Trust', 'cor': '#95a5a6'}
 }
@@ -43,7 +44,7 @@ def buscar_dados_etf(tickers, period):
             if hist.empty: continue
             
             preco_atual = hist['Close'].iloc[-1]
-            # Cálculo de Preço Justo: Média de 1 ano (252 dias úteis) ou o disponível
+            # Preço Justo: Média móvel de 50 dias
             preco_justo = hist['Close'].rolling(window=50).mean().iloc[-1]
             
             data_dict[t] = {
@@ -58,10 +59,12 @@ def buscar_dados_etf(tickers, period):
 dados_etf = buscar_dados_etf(list(etfs_config.keys()), "2y")
 
 # 5. Interface
-st.title("🌎 Monitor de ETFs Internacionais")
+st.title("🌎 Monitor de Estratégia de ETFs")
 
 if dados_etf:
-    cols = st.columns(5)
+    # Ajuste dinâmico de colunas baseado na quantidade de ativos
+    cols = st.columns(len(etfs_config))
+    
     for i, (ticker, config) in enumerate(etfs_config.items()):
         if ticker in dados_etf:
             with cols[i]:
@@ -70,12 +73,16 @@ if dados_etf:
                 margem_real = ((p_teto - d['preco_atual']) / p_teto) * 100
                 cor_status = "#28a745" if d['preco_atual'] <= p_teto else "#dc3545"
                 
+                # Identifica se é Real ou Dólar
+                moeda = "R$" if ".SA" in ticker else "$"
+                ticker_display = ticker.replace(".SA", "")
+                
                 st.markdown(f"""
                     <div class="card" style="border-top: 5px solid {config['cor']};">
-                        <b style="font-size:1.2em;">{ticker}</b><br>
-                        <span style="color:gray; font-size:0.8em;">{config['nome']}</span><hr>
-                        Preço: <b>${d['preco_atual']:.2f}</b><br>
-                        Teto: <b>${p_teto:.2f}</b><br>
+                        <b style="font-size:1.1em;">{ticker_display}</b><br>
+                        <span style="color:gray; font-size:0.8em;">{config['nome']}</span><hr style="margin: 8px 0;">
+                        Preço: <b>{moeda}{d['preco_atual']:.2f}</b><br>
+                        Teto: <b>{moeda}{p_teto:.2f}</b><br>
                         <span style="color:{cor_status};">Margem: <b>{margem_real:.1f}%</b></span>
                     </div>
                 """, unsafe_allow_html=True)
@@ -84,7 +91,7 @@ if dados_etf:
     
     # 6. Gráfico Detalhado
     st.subheader("📈 Análise de Tendência")
-    selecionado = st.selectbox("Selecione o ETF para ver o gráfico:", list(dados_etf.keys()))
+    selecionado = st.selectbox("Selecione o ativo para ver o detalhe:", list(dados_etf.keys()), format_func=lambda x: x.replace(".SA", ""))
     
     df_plot = dados_etf[selecionado]['historico']
     
@@ -95,4 +102,4 @@ if dados_etf:
     fig.update_layout(template="plotly_white", height=400, margin=dict(l=0, r=0, t=20, b=0))
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error("Erro ao carregar dados do Yahoo Finance. Tente o botão Update na lateral.")
+    st.error("Erro ao carregar dados. Verifique a conexão ou o botão Update.")
