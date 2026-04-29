@@ -3,72 +3,42 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 
-# 1. Configurações da Página e Proteção contra Tradutor
+# 1. Configurações da Página
 st.set_page_config(page_title="ETF Analytics Pro", layout="wide")
 
-# Injeção de CSS para travar o layout e impedir tradução automática do navegador
+# 2. Estilo CSS Blindado (Corrigido o erro de fechamento de tag)
 st.markdown("""
-    <html translate="no">
     <style>
-    /* Impede tradução automática */
-    .notranslate { translate: no !important; }
-    
-    /* Fundo e Container Principal */
     .stApp { background-color: #0e1117; }
     
-    /* Estilização dos Cards Customizados */
-    .card-container {
+    /* Container do Card */
+    .etf-card {
         background-color: #161b22;
         border: 1px solid #30363d;
         border-radius: 10px;
         padding: 15px;
-        margin-bottom: 10px;
-        min-height: 220px;
-        border-top: 4px solid;
+        margin-bottom: 20px;
+        border-top: 5px solid;
     }
     
-    .ticker-name {
-        color: #ffffff;
-        font-size: 1.4rem;
-        font-weight: 800;
-        margin-bottom: 0px;
-    }
+    .ticker-id { color: #ffffff; font-size: 1.5rem; font-weight: 800; margin: 0; }
+    .ticker-desc { color: #8b949e; font-size: 0.8rem; margin-bottom: 15px; }
     
-    .asset-desc {
-        color: #8b949e;
-        font-size: 0.75rem;
-        margin-bottom: 15px;
-        height: 35px;
-        overflow: hidden;
-    }
+    .m-label { color: #8b949e; font-size: 0.75rem; margin-top: 10px; text-transform: uppercase; }
+    .m-value { color: #ffffff; font-size: 1.2rem; font-weight: 600; margin-bottom: 5px; }
     
-    .metric-label {
-        color: #8b949e;
-        font-size: 0.8rem;
-        margin-top: 10px;
-    }
-    
-    .metric-value {
-        color: #ffffff;
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-
-    .margin-badge {
-        display: inline-block;
-        padding: 4px 8px;
+    .status-badge {
+        padding: 6px;
         border-radius: 6px;
-        font-size: 0.9rem;
-        font-weight: 700;
-        margin-top: 15px;
-        width: 100%;
         text-align: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-top: 15px;
     }
     </style>
-    </html>
     """, unsafe_allow_html=True)
 
-# 2. Definição dos ETFs
+# 3. Configuração dos Ativos
 etfs_config = {
     'IVV': {'nome': '🇺🇸 S&P 500 ETF', 'cor': '#238636'},
     'VEA': {'nome': '🇺🇸 Dev. Markets', 'cor': '#1f6feb'},
@@ -78,74 +48,74 @@ etfs_config = {
     'DIVO11.SA': {'nome': '🇧🇷 Dividendos Br', 'cor': '#db6d28'}
 }
 
-# 3. Sidebar
+# 4. Sidebar
 st.sidebar.title("📊 Controle")
 margem_seguranca = st.sidebar.slider("Margem de Segurança (%)", 0, 20, 5) / 100
 periodo_grafico = st.sidebar.selectbox("Período do Gráfico", ["6mo", "1y", "2y", "5y"], index=1)
 
-if st.sidebar.button("🔄 Atualizar"):
+if st.sidebar.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
 
-# 4. Busca de Dados
+# 5. Busca de Dados (Yahoo Finance)
 @st.cache_data(ttl=3600)
-def buscar_dados(tickers):
-    data_dict = {}
+def carregar_dados(tickers):
+    data = {}
     for t in tickers:
         try:
-            obj = yf.Ticker(t)
-            hist = obj.history(period="2y")
-            if hist.empty: continue
-            data_dict[t] = {
-                'atual': hist['Close'].iloc[-1],
-                'justo': hist['Close'].rolling(window=50).mean().iloc[-1],
-                'hist': hist
+            stock = yf.Ticker(t)
+            h = stock.history(period="2y")
+            if h.empty: continue
+            data[t] = {
+                'atual': h['Close'].iloc[-1],
+                'media': h['Close'].rolling(window=50).mean().iloc[-1],
+                'hist': h
             }
         except: continue
-    return data_dict
+    return data
 
-dados = buscar_dados(list(etfs_config.keys()))
+dados = carregar_dados(list(etfs_config.keys()))
 
-# 5. Dashboard
+# 6. Dashboard
 st.title("ETF Analytics Pro 💎")
 
 if dados:
     cols = st.columns(6)
-    for i, (ticker, config) in enumerate(etfs_config.items()):
+    for i, (ticker, cfg) in enumerate(etfs_config.items()):
         if ticker in dados:
             with cols[i]:
                 d = dados[ticker]
-                p_teto = d['justo'] * (1 - margem_seguranca)
-                margem_pct = ((p_teto - d['atual']) / p_teto) * 100
+                p_teto = d['media'] * (1 - margem_seguranca)
+                margem_p = ((p_teto - d['atual']) / p_teto) * 100
                 moeda = "R$" if ".SA" in ticker else "$"
                 
                 # Cores de Status
-                status_color = "#238636" if d['atual'] <= p_teto else "#da3633"
-                status_bg = "rgba(35, 134, 54, 0.15)" if d['atual'] <= p_teto else "rgba(218, 54, 51, 0.15)"
+                s_color = "#238636" if d['atual'] <= p_teto else "#da3633"
+                s_bg = "rgba(35, 134, 54, 0.1)" if d['atual'] <= p_teto else "rgba(218, 54, 51, 0.1)"
                 
-                # Card em HTML Puro para evitar bugs do Streamlit Metrics
+                # Renderização do Card corrigida
                 st.markdown(f"""
-                    <div class="card-container notranslate" style="border-top-color: {config['cor']};">
-                        <div class="ticker-name">{ticker.replace('.SA', '')}</div>
-                        <div class="asset-desc">{config['nome']}</div>
+                    <div class="etf-card" style="border-top-color: {cfg['cor']};">
+                        <div class="ticker-id">{ticker.replace('.SA', '')}</div>
+                        <div class="ticker-desc">{cfg['nome']}</div>
                         
-                        <div class="metric-label">Preço Atual</div>
-                        <div class="metric-value">{moeda} {d['atual']:.2f}</div>
+                        <div class="m-label">Atual</div>
+                        <div class="m-value">{moeda} {d['atual']:.2f}</div>
                         
-                        <div class="metric-label">Preço Teto</div>
-                        <div class="metric-value">{moeda} {p_teto:.2f}</div>
+                        <div class="m-label">P. Teto</div>
+                        <div class="m-value">{moeda} {p_teto:.2f}</div>
                         
-                        <div class="margin-badge" style="color: {status_color}; background-color: {status_bg}; border: 1px solid {status_color};">
-                            Margem: {margem_pct:.1f}%
+                        <div class="status-badge" style="color: {s_color}; background-color: {s_bg}; border: 1px solid {s_color};">
+                            Margem: {margem_p:.1f}%
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
 
     st.markdown("---")
     
-    # 6. Gráfico
-    st.subheader("📈 Tendência")
-    selecionado = st.selectbox("Ativo:", list(dados.keys()), format_func=lambda x: x.replace(".SA", ""))
+    # 7. Gráfico
+    st.subheader("📈 Análise de Tendência")
+    selecionado = st.selectbox("Selecione o ativo:", list(dados.keys()), format_func=lambda x: x.replace(".SA", ""))
     df_plot = dados[selecionado]['hist'].tail(252)
     
     fig = go.Figure()
@@ -158,3 +128,5 @@ if dados:
         legend=dict(orientation="h", y=1.1, x=1, xanchor="right")
     )
     st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("Aguardando resposta do Yahoo Finance... Clique em Atualizar se demorar.")
