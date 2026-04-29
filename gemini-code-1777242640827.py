@@ -6,25 +6,17 @@ import plotly.graph_objects as go
 # 1. Configurações da Página
 st.set_page_config(page_title="ETF Analytics Pro", layout="wide")
 
-# 2. CSS Global (Ajusta o visual sem quebrar a renderização dos dados)
+# 2. CSS Mínimo - Apenas para evitar que os números fiquem cortados ("...")
 st.markdown("""
     <style>
-    /* Fundo Escuro */
-    .stApp { background-color: #0e1117; }
-    
-    /* Títulos e Textos */
-    h1, h2, h3 { color: white !important; font-family: 'Inter', sans-serif; }
-    
-    /* Estilização dos Cards Nativos */
-    [data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 15px;
+    /* Reduz o tamanho da fonte das métricas para caber em 6 colunas perfeitamente */
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem !important;
     }
-    
-    /* Remove o padding extra das colunas para os cards ficarem juntos */
-    [data-testid="column"] { padding: 0 5px !important; }
+    /* Reduz o espaçamento entre as métricas dentro do card */
+    [data-testid="stMetric"] {
+        margin-bottom: -15px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -41,7 +33,6 @@ etfs_config = {
 # 4. Sidebar
 st.sidebar.title("📊 Painel de Controle")
 margem_seguranca = st.sidebar.slider("Margem de Segurança (%)", 0, 20, 5) / 100
-periodo_grafico = st.sidebar.selectbox("Período do Gráfico", ["6mo", "1y", "2y", "5y"], index=1)
 
 if st.sidebar.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
@@ -74,26 +65,28 @@ if dados:
     for i, (ticker, cfg) in enumerate(etfs_config.items()):
         if ticker in dados:
             with cols[i]:
-                d = dados[ticker]
-                p_teto = d['media'] * (1 - margem_seguranca)
-                margem_p = ((p_teto - d['atual']) / p_teto) * 100
-                moeda = "R$" if ".SA" in ticker else "$"
-                
-                # Exibe o Nome e Ticker de forma simples
-                st.markdown(f"### {ticker.replace('.SA', '')}")
-                st.caption(cfg['nome'])
-                
-                # Usa st.metric NATIVO (Isso impede o erro de aparecer código na tela)
-                st.metric(label="Preço Atual", value=f"{moeda} {d['atual']:.2f}")
-                st.metric(label="Preço Teto", value=f"{moeda} {p_teto:.2f}")
-                
-                # Métrica de Margem com cor dinâmica automática
-                st.metric(
-                    label="Margem Seg.", 
-                    value=f"{margem_p:.1f}%", 
-                    delta=f"{margem_p:.1f}%" if d['atual'] <= p_teto else f"{margem_p:.1f}%",
-                    delta_color="normal" if d['atual'] <= p_teto else "inverse"
-                )
+                # Card Nativo do Streamlit (Sem quebras de HTML)
+                with st.container(border=True):
+                    d = dados[ticker]
+                    p_teto = d['media'] * (1 - margem_seguranca)
+                    margem_p = ((p_teto - d['atual']) / p_teto) * 100
+                    moeda = "R$" if ".SA" in ticker else "$"
+                    
+                    # Cabeçalho do Card
+                    st.markdown(f"**{ticker.replace('.SA', '')}**")
+                    st.caption(cfg['nome'])
+                    
+                    # Métricas
+                    st.metric(label="Preço Atual", value=f"{moeda} {d['atual']:.2f}")
+                    st.metric(label="Preço Teto", value=f"{moeda} {p_teto:.2f}")
+                    
+                    # Cor da margem automática
+                    st.metric(
+                        label="Margem Seg.", 
+                        value=f"{margem_p:.1f}%", 
+                        delta=f"{margem_p:.1f}%",
+                        delta_color="normal" if d['atual'] <= p_teto else "inverse"
+                    )
 
     st.markdown("---")
     
@@ -114,3 +107,5 @@ if dados:
         height=400
     )
     st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("Carregando dados do Yahoo Finance...")
