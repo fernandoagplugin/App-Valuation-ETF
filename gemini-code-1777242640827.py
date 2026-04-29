@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # 1. Configurações da Página
-st.set_page_config(page_title="Dashboard ETFs Internacionais & DIVO11", layout="wide")
+st.set_page_config(page_title="Dashboard ETFs Internacionais", layout="wide")
 
 # Estilos Visuais
 st.markdown("""
@@ -14,14 +14,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Definição dos ETFs (Incluso DIVO11)
+# 2. Definição dos ETFs (DIVO11 movido para o final e com bandeiras)
 etfs_config = {
-    'IVV': {'nome': 'S&P 500 ETF', 'cor': '#27ae60'},
-    'VEA': {'nome': 'Developed Markets', 'cor': '#2980b9'},
-    'SOXX': {'nome': 'Semiconductors', 'cor': '#8e44ad'},
-    'DIVO11.SA': {'nome': 'Dividendos Brasil', 'cor': '#e67e22'}, # Novo
-    'IAU': {'nome': 'Gold Trust', 'cor': '#f1c40f'},
-    'SIVR': {'nome': 'Silver Trust', 'cor': '#95a5a6'}
+    'IVV': {'nome': '🇺🇸 S&P 500 ETF', 'cor': '#27ae60'},
+    'VEA': {'nome': '🇺🇸 Developed Markets', 'cor': '#2980b9'},
+    'SOXX': {'nome': '🇺🇸 Semiconductors', 'cor': '#8e44ad'},
+    'IAU': {'nome': '🇺🇸 Gold Trust', 'cor': '#f1c40f'},
+    'SIVR': {'nome': '🇺🇸 Silver Trust', 'cor': '#95a5a6'},
+    'DIVO11.SA': {'nome': '🇧🇷 Dividendos Brasil', 'cor': '#e67e22'} # Agora no final
 }
 
 # 3. Sidebar
@@ -40,7 +40,8 @@ def buscar_dados_etf(tickers, period):
     for t in tickers:
         try:
             ticker_obj = yf.Ticker(t)
-            hist = ticker_obj.history(period=period)
+            # Aumentamos um pouco o histórico buscado para garantir que a média móvel tenha dados suficientes
+            hist = ticker_obj.history(period="2y") 
             if hist.empty: continue
             
             preco_atual = hist['Close'].iloc[-1]
@@ -52,18 +53,19 @@ def buscar_dados_etf(tickers, period):
                 'preco_justo': preco_justo,
                 'historico': hist
             }
-        except:
+        except Exception as e:
+            print(f"Erro ao buscar {t}: {e}")
             continue
     return data_dict
 
-dados_etf = buscar_dados_etf(list(etfs_config.keys()), "2y")
+dados_etf = buscar_dados_etf(list(etfs_config.keys()), periodo_grafico)
 
 # 5. Interface
 st.title("🌎 Monitor de Estratégia de ETFs")
 
 if dados_etf:
-    # Ajuste dinâmico de colunas baseado na quantidade de ativos
-    cols = st.columns(len(etfs_config))
+    # Cria 6 colunas para os 6 ativos
+    cols = st.columns(6)
     
     for i, (ticker, config) in enumerate(etfs_config.items()):
         if ticker in dados_etf:
@@ -73,14 +75,14 @@ if dados_etf:
                 margem_real = ((p_teto - d['preco_atual']) / p_teto) * 100
                 cor_status = "#28a745" if d['preco_atual'] <= p_teto else "#dc3545"
                 
-                # Identifica se é Real ou Dólar
+                # Lógica de Moeda baseada na bandeira/ticker
                 moeda = "R$" if ".SA" in ticker else "$"
                 ticker_display = ticker.replace(".SA", "")
                 
                 st.markdown(f"""
                     <div class="card" style="border-top: 5px solid {config['cor']};">
                         <b style="font-size:1.1em;">{ticker_display}</b><br>
-                        <span style="color:gray; font-size:0.8em;">{config['nome']}</span><hr style="margin: 8px 0;">
+                        <span style="color:gray; font-size:0.75em;">{config['nome']}</span><hr style="margin: 8px 0;">
                         Preço: <b>{moeda}{d['preco_atual']:.2f}</b><br>
                         Teto: <b>{moeda}{p_teto:.2f}</b><br>
                         <span style="color:{cor_status};">Margem: <b>{margem_real:.1f}%</b></span>
@@ -91,7 +93,12 @@ if dados_etf:
     
     # 6. Gráfico Detalhado
     st.subheader("📈 Análise de Tendência")
-    selecionado = st.selectbox("Selecione o ativo para ver o detalhe:", list(dados_etf.keys()), format_func=lambda x: x.replace(".SA", ""))
+    # Formatador para remover o .SA do seletor do gráfico
+    selecionado = st.selectbox(
+        "Selecione o ativo para ver o detalhe:", 
+        options=list(dados_etf.keys()), 
+        format_func=lambda x: f"{x.replace('.SA', '')} ({etfs_config[x]['nome']})"
+    )
     
     df_plot = dados_etf[selecionado]['historico']
     
@@ -102,4 +109,4 @@ if dados_etf:
     fig.update_layout(template="plotly_white", height=400, margin=dict(l=0, r=0, t=20, b=0))
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.error("Erro ao carregar dados. Verifique a conexão ou o botão Update.")
+    st.error("Dados não encontrados. Verifique a conexão ou clique em Forçar Update.")
